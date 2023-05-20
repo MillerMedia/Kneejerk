@@ -1,14 +1,9 @@
-import os
 import re
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import argparse
-import json
-
-# Read version
-with open('../VERSION', 'r') as f:
-    version = f.read().strip()
+from pkg_resources import get_distribution
 
 # ASCII Banner
 banner = f"""
@@ -19,7 +14,7 @@ banner = f"""
 | . \| | | |  __|  __| |  __| |  |   < 
 |_|\_|_| |_|\___|\___| |\___|_|  |_|\_\              
                     |__/                
-                               v{version}
+                               v0.0.1
 """
 print(banner)
 

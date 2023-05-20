@@ -1,12 +1,8 @@
 from setuptools import setup, find_packages
 
-# Read version
-with open('VERSION', 'r') as f:
-    version = f.read().strip()
-
 setup(
     name="kneejerk",
-    version=version,
+    version='0.0.1',
     description="Kneejerk - A tool for scanning environment variables from React websites",
     packages=find_packages(),
     install_requires=[
