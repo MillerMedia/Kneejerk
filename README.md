@@ -7,10 +7,26 @@ Kneejerk is a pentesting command line tool for scanning environment variables fr
 * Outputs found environment variables to the console or to a specified file.
 
 ## Usage
+
+#### Example Command
 ```angular2html
 kneejerk -u https://www.example.com -o output.txt
 ```
 
+#### Example Output
+```angular2html
+[kneejerk] [js] [info] https://app.example.com/static/js/2.abcdefg.chunk.js [NODE_ENV:"production"]
+[kneejerk] [js] [info] https://app.example.com/static/js/2.abcdefg.chunk.js [REACT_APP_BUILD:"Production"]
+[kneejerk] [js] [info] https://app.example.com/static/js/2.abcdefg.chunk.js [REACT_APP_AWS_ACCESS_ID:"YOUR_AWS_ACCESS_ID"]
+[kneejerk] [js] [info] https://app.example.com/static/js/2.abcdefg.chunk.js [REACT_APP_AWS_ACCESS_KEY:"YOUR_AWS_ACCESS_KEY"]
+[kneejerk] [js] [info] https://app.example.com/static/js/2.abcdefg.chunk.js [REACT_APP_API_HOST:"https://app.example.com"]
+[kneejerk] [js] [info] https://app.example.com/static/js/2.abcdefg.chunk.js [REACT_APP_WEB_HOST:"WEB_HOST"]
+[kneejerk] [js] [info] https://app.example.com/static/js/2.abcdefg.chunk.js [REACT_APP_VERSION:"1.0.0"]
+[kneejerk] [js] [info] https://app.example.com/static/js/2.abcdefg.chunk.js [REACT_APP_AWS_CLIENT_DATA_BUCKET_NAME:"example-client-bucket"]
+[kneejerk] [js] [info] https://app.example.com/static/js/2.abcdefg.chunk.js [REACT_APP_AWS_REGION:"us-east-2"]
+```
+
+#### Flags/Options
 ```angular2html
 Kneejerk - A tool for scanning environment variables in .js files
 
@@ -22,6 +38,7 @@ optional arguments:
                         Path to output file
   -debug                Print debugging statements
 ```
+
 ## Installation
 
 ### Homebrew (Recommended)
