@@ -1,6 +1,6 @@
 # Kneejerk
 
-Kneejerk is a Python-based tool for scanning environment variables from React websites.
+Kneejerk is a pentesting command line tool for scanning environment variables from React websites.
 
 ## Features
 * Scans JavaScript files of a provided URL for environment variables.
