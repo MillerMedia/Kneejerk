@@ -11,6 +11,17 @@ Kneejerk is a pentesting command line tool for scanning environment variables fr
 kneejerk -u https://www.example.com -o output.txt
 ```
 
+```angular2html
+Kneejerk - A tool for scanning environment variables in .js files
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -u URL, --url URL     URL of the website to scan
+  -l LIST, --list LIST  Path to a file containing a list of URLs to scan
+  -o OUTPUT, --output OUTPUT
+                        Path to output file
+  -debug                Print debugging statements
+```
 ## Installation
 
 ### Homebrew (Recommended)
