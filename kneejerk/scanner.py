@@ -35,7 +35,8 @@ def determine_severity(env_var):
     env_var = env_var.upper()  # Ensure case-insensitive comparison
     if any([
         all(substring in env_var for substring in ['AWS', 'ACCESS', 'ID']),
-        all(substring in env_var for substring in ['AWS', 'ACCESS', 'KEY'])
+        all(substring in env_var for substring in ['AWS', 'ACCESS', 'KEY']),
+        all(substring in env_var for substring in ['SECRET'])
     ]):
         return 'high'
     elif any([
@@ -55,14 +56,14 @@ def colorize(severity):
         return Fore.GREEN
 
 
-def colorize_message(template_id, output_type, severity, js_url, match):
-    template_id_colored = Fore.GREEN + template_id + Style.RESET_ALL
-    output_type_colored = Fore.MAGENTA + output_type + Style.RESET_ALL
-    severity_colored = colorize(severity) + severity + Style.RESET_ALL
+def colorize_message(template_id, output_type, severity, js_url, match, no_color):
+    template_id_colored = template_id if no_color else Fore.GREEN + template_id + Style.RESET_ALL
+    output_type_colored = output_type if no_color else Fore.MAGENTA + output_type + Style.RESET_ALL
+    severity_colored = severity if no_color else colorize(severity) + severity + Style.RESET_ALL
     return f"[{template_id_colored}] [{output_type_colored}] [{severity_colored}] {js_url} [{match}]"
 
 
-def scrape_js_files(url, found_vars=set(), debug=False):
+def scrape_js_files(url, found_vars=set(), debug=False, no_color=False):
     response = requests.get(url)
 
     # Parse the HTML content
@@ -91,7 +92,7 @@ def scrape_js_files(url, found_vars=set(), debug=False):
                     if match not in found_vars:
                         found_vars.add(match)
                         severity = determine_severity(match)
-                        colored_message = colorize_message("kneejerk", "js", severity, js_url, match)
+                        colored_message = colorize_message("kneejerk", "js", severity, js_url, match, no_color)
                         print(colored_message)
 
 
@@ -102,6 +103,7 @@ def main():
     group.add_argument('-l', '--list', help='Path to a file containing a list of URLs to scan')
     parser.add_argument('-o', '--output', help='Path to output file')
     parser.add_argument('-debug', action='store_true', help='Print debugging statements')
+    parser.add_argument('-no-color', action='store_true', help='Disable colored output')
 
     args = parser.parse_args()
 
@@ -110,19 +112,24 @@ def main():
 
     found_vars = set()
     if args.url:
-        scrape_js_files(args.url, found_vars, args.debug)
+        scrape_js_files(args.url, found_vars, args.debug, args.no_color)
     elif args.list:
         with open(args.list, 'r') as file:
             urls = file.readlines()
             for url in urls:
                 url = url.strip()
-                scrape_js_files(url, found_vars, args.debug)
-    elif not sys.stdin.isatty():  # Check if there's input from sys.stdin
+                scrape_js_files(url, found_vars, args.debug, args.no_color)
+    elif not sys.stdin.isatty():
+        # Remove ANSI codes for colored output
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
         for line in sys.stdin:
+            line = line.strip()
+            line = ansi_escape.sub('', line)
             match = regex.search(line)
             if match:
                 url = match.group(2)
-                scrape_js_files(url, found_vars, args.debug)
+                scrape_js_files(url, found_vars, args.debug, args.no_color)
 
     if args.output:
         with open(args.output, 'w') as f:
