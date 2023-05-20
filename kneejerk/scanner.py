@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import argparse
 import sys
-from colorama import Fore, Back, Style, init
+from colorama import Fore, Style, init
 
 init(autoreset=True)
 
@@ -112,24 +112,26 @@ def main():
 
     found_vars = set()
     if args.url:
-        scrape_js_files(args.url, found_vars, args.debug, args.no_color)
+        scrape_js_files(args.url, found_vars, args.debug)
     elif args.list:
         with open(args.list, 'r') as file:
             urls = file.readlines()
             for url in urls:
                 url = url.strip()
-                scrape_js_files(url, found_vars, args.debug, args.no_color)
+                scrape_js_files(url, found_vars, args.debug)
     elif not sys.stdin.isatty():
         # Remove ANSI codes for colored output
         ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
         for line in sys.stdin:
             line = line.strip()
+            # Print the line before processing
+            print(line)
             line = ansi_escape.sub('', line)
             match = regex.search(line)
             if match:
                 url = match.group(2)
-                scrape_js_files(url, found_vars, args.debug, args.no_color)
+                scrape_js_files(url, found_vars, args.debug)
 
     if args.output:
         with open(args.output, 'w') as f:
