@@ -3,7 +3,10 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import argparse
-from pkg_resources import get_distribution
+import sys
+from colorama import Fore, Back, Style, init
+
+init(autoreset=True)
 
 # ASCII Banner
 banner = f"""
@@ -23,6 +26,36 @@ js_file_pattern = re.compile(r'.*\.js')
 
 # Regex to find environment variables in both formats
 env_var_pattern = re.compile(r'(\b(?:NODE|REACT|AWS)[A-Z_]*\b\s*:\s*".*?")|(process\.env\.[A-Z_][A-Z0-9_]*)')
+
+# ANSI escape code for orange
+orange = '\033[38;5;208m'
+
+
+def determine_severity(env_var):
+    env_var = env_var.upper()  # Ensure case-insensitive comparison
+    if any([
+        all(substring in env_var for substring in ['AWS', 'ACCESS', 'ID']),
+        all(substring in env_var for substring in ['AWS', 'ACCESS', 'KEY'])
+    ]):
+        return 'high'
+    else:
+        return 'info'
+
+
+def colorize(severity):
+    if severity == "debug" or severity == "info":
+        return Fore.BLUE
+    elif severity == "high":
+        return Fore.RED
+    else:
+        return Fore.GREEN
+
+
+def colorize_message(template_id, output_type, severity, js_url, match):
+    template_id_colored = Fore.GREEN + template_id + Style.RESET_ALL
+    output_type_colored = Fore.MAGENTA + output_type + Style.RESET_ALL
+    severity_colored = colorize(severity) + severity + Style.RESET_ALL
+    return f"[{template_id_colored}] [{output_type_colored}] [{severity_colored}] {js_url} [{match}]"
 
 
 def scrape_js_files(url, found_vars=set(), debug=False):
@@ -53,10 +86,9 @@ def scrape_js_files(url, found_vars=set(), debug=False):
                     match = match[0] if match[0] else match[1]  # Choose the match from the correct group
                     if match not in found_vars:
                         found_vars.add(match)
-                        if debug:
-                            print(f'[kneejerk] [js] [debug] {js_url} [{match}]')
-                        else:
-                            print(f'[kneejerk] [js] [info] {js_url} [{match}]')
+                        severity = determine_severity(match)
+                        colored_message = colorize_message("kneejerk", "js", severity, js_url, match)
+                        print(colored_message)
 
 
 def main():
@@ -69,14 +101,23 @@ def main():
 
     args = parser.parse_args()
 
+    # Regular expression to extract the URL from the line
+    regex = re.compile(r'\[(tech-detect:react)\] \[http\] \[info\] (\S+)')
+
     found_vars = set()
     if args.url:
         scrape_js_files(args.url, found_vars, args.debug)
-    else:
+    elif args.list:
         with open(args.list, 'r') as file:
             urls = file.readlines()
             for url in urls:
                 url = url.strip()
+                scrape_js_files(url, found_vars, args.debug)
+    else:
+        for line in sys.stdin:
+            match = regex.search(line)
+            if match:
+                url = match.group(2)
                 scrape_js_files(url, found_vars, args.debug)
 
     if args.output:
