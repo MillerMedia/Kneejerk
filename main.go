@@ -1,0 +1,158 @@
+package main
+
+import (
+	"bufio"
+	"flag"
+	"fmt"
+	"github.com/PuerkitoBio/goquery"
+	"github.com/logrusorgru/aurora"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"os"
+	"regexp"
+	"strings"
+)
+
+// ASCII Banner
+const banner = `
+ _  __                _           _    
+| |/ /               (_)         | |   
+| ' / _ __   ___  ___ _  ___ _ __| | __
+|  < | '_ \ / _ \/ _ | |/ _ | '__| |/ /
+| . \| | | |  __|  __| |  __| |  |   < 
+|_|\_|_| |_|\___|\___| |\___|_|  |_|\_\              
+                    |__/                
+                               v0.0.1
+`
+
+// Pattern for .js files
+var jsFilePattern = regexp.MustCompile(`.*\.js`)
+
+// Regex to find environment variables in both formats
+var envVarPattern = regexp.MustCompile(`(\b(?:NODE|REACT|AWS)[A-Z_]*\b\s*:\s*".*?")|(process\.env\.[A-Z_][A-Z0-9_]*)`)
+
+var foundVars = map[string]struct{}{}
+
+func determineSeverity(envVar string) string {
+	envVar = strings.ToUpper(envVar) // Ensure case-insensitive comparison
+	if strings.Contains(envVar, "AWS") && (strings.Contains(envVar, "ACCESS") && (strings.Contains(envVar, "ID") || strings.Contains(envVar, "KEY"))) || strings.Contains(envVar, "SECRET") {
+		return "high"
+	} else if strings.Contains(envVar, "AWS") {
+		return "medium"
+	} else {
+		return "info"
+	}
+}
+
+func colorizeMessage(templateID string, outputType string, severity string, jsURL string, match string) string {
+	templateIDColored := aurora.BrightGreen(templateID).String()
+	outputTypeColored := aurora.BrightBlue(outputType).String()
+	var severityColored string
+	if severity == "high" {
+		severityColored = aurora.Red(severity).String()
+	} else if severity == "medium" {
+		severityColored = aurora.Yellow(severity).String()
+	} else {
+		severityColored = aurora.Blue(severity).String()
+	}
+	return fmt.Sprintf("[%s] [%s] [%s] %s [%s]", templateIDColored, outputTypeColored, severityColored, jsURL, match)
+}
+
+func scrapeJSFiles(u string, debug bool) {
+	res, err := http.Get(u)
+	if err != nil {
+		fmt.Printf("Failed to get %s: %v\n", u, err)
+		return
+	}
+	defer res.Body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(res.Body)
+	if err != nil {
+		fmt.Printf("Failed to parse %s: %v\n", u, err)
+		return
+	}
+
+	doc.Find("script, link").Each(func(i int, s *goquery.Selection) {
+		src, _ := s.Attr("src")
+		if src == "" {
+			src, _ = s.Attr("href")
+		}
+		if src != "" && strings.Contains(src, "/static/") && jsFilePattern.MatchString(src) {
+			jsURL := urlJoin(u, src)
+			jsRes, err := http.Get(jsURL)
+			if err != nil {
+				fmt.Printf("Failed to get %s: %v\n", jsURL, err)
+				return
+			}
+			defer jsRes.Body.Close()
+
+			jsContent, err := ioutil.ReadAll(jsRes.Body)
+			if err != nil {
+				fmt.Printf("Failed to read %s: %v\n", jsURL, err)
+				return
+			}
+
+			matches := envVarPattern.FindAllString(string(jsContent), -1)
+			for _, match := range matches {
+				if _, ok := foundVars[match]; !ok {
+					foundVars[match] = struct{}{}
+					severity := determineSeverity(match)
+					coloredMessage := colorizeMessage("kneejerk", "js", severity, jsURL, match)
+					fmt.Println(coloredMessage)
+				}
+			}
+		}
+	})
+}
+
+func urlJoin(baseURL string, relURL string) string {
+	u, _ := url.Parse(baseURL)
+	rel, _ := url.Parse(relURL)
+	return u.ResolveReference(rel).String()
+}
+
+func main() {
+	fmt.Println(aurora.BrightMagenta(banner).Bold())
+
+	url := flag.String("u", "", "URL of the website to scan")
+	list := flag.String("l", "", "Path to a file containing a list of URLs to scan")
+	output := flag.String("o", "", "Path to output file")
+	debug := flag.Bool("debug", false, "Print debugging statements")
+	flag.Parse()
+
+	if *url != "" {
+		scrapeJSFiles(*url, *debug)
+	} else if *list != "" {
+		file, err := os.Open(*list)
+		if err != nil {
+			fmt.Printf("Failed to open %s: %v\n", *list, err)
+			return
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			scrapeJSFiles(scanner.Text(), *debug)
+		}
+	} else if info, _ := os.Stdin.Stat(); info.Mode()&os.ModeCharDevice == 0 {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			scrapeJSFiles(scanner.Text(), *debug)
+		}
+	}
+
+	if *output != "" {
+		file, err := os.Create(*output)
+		if err != nil {
+			fmt.Printf("Failed to create %s: %v\n", *output, err)
+			return
+		}
+		defer file.Close()
+
+		for varName := range foundVars {
+			_, _ = file.WriteString(fmt.Sprintf("[kneejerk] [js] [info] %s\n", varName))
+		}
+		fmt.Printf("Results saved to %s\n", *output)
+	}
+}

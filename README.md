@@ -31,12 +31,14 @@ kneejerk -u https://www.example.com -o output.txt
 Kneejerk - A tool for scanning environment variables in .js files
 
 optional arguments:
-  -h, --help            show this help message and exit
-  -u URL, --url URL     URL of the website to scan
-  -l LIST, --list LIST  Path to a file containing a list of URLs to scan
-  -o OUTPUT, --output OUTPUT
-                        Path to output file
-  -debug                Print debugging statements
+  -debug
+        Print debugging statements
+  -l string
+        Path to a file containing a list of URLs to scan
+  -o string
+        Path to output file
+  -u string
+        URL of the website to scan
 ```
 
 ## Installation
@@ -48,16 +50,6 @@ You can install Kneejerk using Homebrew:
 ```bash
 brew tap MillerMedia/kneejerk
 brew install kneejerk
-```
-
-### From Source 
-
-Alternatively, you can install Kneejerk by cloning this repository and running setup.py:
-
-```bash
-git clone https://github.com/MillerMedia/Kneejerk
-cd Kneejerk
-python setup.py install
 ```
 
 ## Contributing
