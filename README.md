@@ -8,7 +8,7 @@ Kneejerk is a pentesting command line tool for scanning environment variables fr
 
 ## Usage
 ```angular2html
-kneejerk -u https://www.example.com [-o output.txt]
+kneejerk -u https://www.example.com -o output.txt
 ```
 
 ## Installation
