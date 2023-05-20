@@ -38,6 +38,10 @@ def determine_severity(env_var):
         all(substring in env_var for substring in ['AWS', 'ACCESS', 'KEY'])
     ]):
         return 'high'
+    elif any([
+        all(substring in env_var for substring in ['AWS']),
+    ]):
+        return 'medium'
     else:
         return 'info'
 
@@ -93,7 +97,7 @@ def scrape_js_files(url, found_vars=set(), debug=False):
 
 def main():
     parser = argparse.ArgumentParser(description='Kneejerk - A tool for scanning environment variables in .js files')
-    group = parser.add_mutually_exclusive_group(required=True)
+    group = parser.add_mutually_exclusive_group()
     group.add_argument('-u', '--url', help='URL of the website to scan')
     group.add_argument('-l', '--list', help='Path to a file containing a list of URLs to scan')
     parser.add_argument('-o', '--output', help='Path to output file')
@@ -113,7 +117,7 @@ def main():
             for url in urls:
                 url = url.strip()
                 scrape_js_files(url, found_vars, args.debug)
-    else:
+    elif not sys.stdin.isatty():  # Check if there's input from sys.stdin
         for line in sys.stdin:
             match = regex.search(line)
             if match:
