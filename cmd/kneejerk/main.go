@@ -3,13 +3,12 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/logrusorgru/aurora"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -24,54 +23,105 @@ const banner = `
 | . \| | | |  __|  __| |  __| |  |   < 
 |_|\_|_| |_|\___|\___| |\___|_|  |_|\_\              
                     |__/                
-                               v0.1.6
+                               v0.2
 `
 
 // Pattern for .js files
 var jsFilePattern = regexp.MustCompile(`.*\.js`)
 
 // Regex to find environment variables in both formats
-var envVarPattern = regexp.MustCompile(`(\b(?:NODE|REACT|AWS)[A-Z_]*\b\s*:\s*".*?")|(process\.env\.[A-Z_][A-Z0-9_]*)`)
+var axiosFetchPattern = regexp.MustCompile(`(axios\.get\('(.*)'\))|(axios\.post\('(.*)'\,)|(axios\('(.*)'\))|(fetch\('(.*)'\))`)
+var axiosPattern = regexp.MustCompile(`axios\.(get|delete|head|options|post|put|patch)\(\s*["']([^"']+)["']`)
+var apiPathPattern = regexp.MustCompile(`"(GET|POST|PUT|DELETE|PATCH)",\s*"(/v\d+[^"]*)"`)
 
 var foundVars = map[string]struct{}{}
 
-var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-
 var outputFileWriter *bufio.Writer = nil
 
-func removeANSI(input string) string {
-	return ansiEscape.ReplaceAllString(input, "")
+// Regex to find environment variables directly assigned
+var directEnvVarPattern = regexp.MustCompile(`\b(?:NODE|REACT_APP|AWS)_?[A-Z_]*\b\s*:\s*".*?"`)
+
+// Regex to find environment variables accessed via process.env
+//var processEnvVarPattern = regexp.MustCompile(`process\.env\.[A-Z_][A-Z0-9_]*[^;]*=`)
+
+func scrapeEnvVars(jsURL string, jsContent string) {
+	// First, check for direct assignments
+	directMatches := directEnvVarPattern.FindAllString(jsContent, -1)
+	for _, match := range directMatches {
+		if _, ok := foundVars[match]; !ok {
+			foundVars[match] = struct{}{}
+			severity := determineSeverity(match)
+			coloredMessage, uncoloredMessage := colorizeMessage("kneejerk", "env-var", severity, jsURL, match)
+			fmt.Println(coloredMessage)
+			if outputFileWriter != nil {
+				_, _ = outputFileWriter.WriteString(uncoloredMessage + "\n")
+				_ = outputFileWriter.Flush()
+			}
+		}
+	}
+
+	// Then, check for process.env variables
+	//processMatches := processEnvVarPattern.FindAllString(jsContent, -1)
+	//for _, match := range processMatches {
+	//	if _, ok := foundVars[match]; !ok {
+	//		foundVars[match] = struct{}{}
+	//		severity := determineSeverity(match)
+	//		coloredMessage, uncoloredMessage := colorizeMessage("kneejerk", "env-var", severity, jsURL, match)
+	//		fmt.Println(coloredMessage)
+	//		if outputFileWriter != nil {
+	//			_, _ = outputFileWriter.WriteString(uncoloredMessage + "\n")
+	//			_ = outputFileWriter.Flush()
+	//		}
+	//	}
+	//}
 }
 
-func determineSeverity(envVar string) string {
-	envVar = strings.ToUpper(envVar) // Ensure case-insensitive comparison
-	if strings.Contains(envVar, "AWS") && (strings.Contains(envVar, "ACCESS") && (strings.Contains(envVar, "ID") || strings.Contains(envVar, "KEY"))) || strings.Contains(envVar, "SECRET") {
-		return "high"
-	} else if strings.Contains(envVar, "AWS") {
-		return "medium"
-	} else if strings.Contains(envVar, "API") && (strings.Contains(envVar, "URL") || strings.Contains(envVar, "HOST") || strings.Contains(envVar, "ROOT")) {
-		return "low"
-	} else {
-		return "info"
-	}
-}
+// Scrape APIs
+func scrapeAPIPaths(jsURL string, jsContent string, debug bool) {
+	debugLog(debug, "Debug: Scanning for API paths in %s...\n", jsURL)
 
-func colorizeMessage(templateID string, outputType string, severity string, jsURL string, match string) (string, string) {
-	templateIDColored := aurora.BrightGreen(templateID).String()
-	outputTypeColored := aurora.BrightBlue(outputType).String()
-	var severityColored string
-	if severity == "high" {
-		severityColored = aurora.Red(severity).String()
-	} else if severity == "medium" {
-		severityColored = aurora.Yellow(severity).String()
-	} else if severity == "low" {
-		severityColored = aurora.Green(severity).String()
-	} else {
-		severityColored = aurora.Blue(severity).String()
+	// Check for patterns like "POST", "/v1/accounts:signInWithPhoneNumber",
+	matches := apiPathPattern.FindAllStringSubmatch(jsContent, -1)
+	for _, match := range matches {
+		debugLog(debug, "Debug: Found API path match: %s\n", match)
+		if _, ok := foundVars[match[0]]; !ok {
+			foundVars[match[0]] = struct{}{}
+			printAPI(debug, jsURL, match[1], match[2])
+		}
 	}
-	coloredMessage := fmt.Sprintf("[%s] [%s] [%s] %s [%s]", templateIDColored, outputTypeColored, severityColored, jsURL, match)
-	uncoloredMessage := fmt.Sprintf("[%s] [%s] [%s] %s [%s]", templateID, outputType, severity, jsURL, match)
-	return coloredMessage, uncoloredMessage
+
+	axiosPathRE := regexp.MustCompile(`axios\.(get|post|put|delete|patch)\(\s*['"]([^'"]+)['"]`)
+	fetchPathRE := regexp.MustCompile(`fetch\(\s*['"]([^'"]+)['"],[\s\S]*?{[\s\S]*?method\s*:\s*['"]([^'"]+)['"]`)
+	ajaxPathRE := regexp.MustCompile(`\$\.ajax\(\s*{\s*url\s*:\s*['"]([^'"]+)['"],[\s\S]*?type\s*:\s*['"]([^'"]+)['"]`)
+
+	axiosMatches := axiosPathRE.FindAllStringSubmatch(jsContent, -1)
+
+	// Swap method and endpoint in axiosMatches
+	for i, match := range axiosMatches {
+		if len(match) > 2 {
+			axiosMatches[i] = []string{match[0], match[2], match[1]}
+		}
+	}
+
+	fetchMatches := fetchPathRE.FindAllStringSubmatch(jsContent, -1)
+	ajaxMatches := ajaxPathRE.FindAllStringSubmatch(jsContent, -1)
+
+	var allMatches [][]string
+	allMatches = append(allMatches, axiosMatches...)
+	allMatches = append(allMatches, fetchMatches...)
+	allMatches = append(allMatches, ajaxMatches...)
+
+	for _, match := range allMatches {
+		if len(match) > 1 {
+			method := strings.ToUpper(match[2]) // Convert the method to uppercase
+			endpoint := strings.ReplaceAll(match[1], `${}`, "")
+			debugLog(debug, "Debug: Found AJAX endpoint: [%s, %s]\n", method, endpoint)
+			if _, ok := foundVars[endpoint]; !ok {
+				foundVars[endpoint] = struct{}{}
+				printAPI(debug, jsURL, method, endpoint)
+			}
+		}
+	}
 }
 
 func scrapeJSFiles(u string, debug bool) {
@@ -91,13 +141,19 @@ func scrapeJSFiles(u string, debug bool) {
 		return
 	}
 
-	doc.Find("script, link").Each(func(i int, s *goquery.Selection) {
+	processedJs := make(map[string]bool)
+
+	doc.Find("script").Each(func(i int, s *goquery.Selection) {
 		src, _ := s.Attr("src")
-		if src == "" {
-			src, _ = s.Attr("href")
-		}
 		if src != "" && strings.Contains(src, "/static/") && jsFilePattern.MatchString(src) {
 			jsURL := urlJoin(u, src)
+
+			// Skip if this JS file has been processed
+			if processedJs[jsURL] {
+				return
+			}
+			processedJs[jsURL] = true
+
 			jsRes, err := http.Get(jsURL)
 			if err != nil {
 				fmt.Printf("Failed to get %s: %v\n", jsURL, err)
@@ -114,27 +170,53 @@ func scrapeJSFiles(u string, debug bool) {
 			// Remove ANSI escape sequences
 			cleanJsContent := removeANSI(string(jsContent))
 
-			matches := envVarPattern.FindAllString(cleanJsContent, -1)
-			for _, match := range matches {
-				if _, ok := foundVars[match]; !ok {
-					foundVars[match] = struct{}{}
-					severity := determineSeverity(match)
-					coloredMessage, uncoloredMessage := colorizeMessage("kneejerk", "js", severity, jsURL, match)
-					fmt.Println(coloredMessage)
-					if outputFileWriter != nil {
-						_, _ = outputFileWriter.WriteString(uncoloredMessage + "\n")
-						_ = outputFileWriter.Flush()
+			// Call the specific scraping functions
+			scrapeEnvVars(jsURL, cleanJsContent)
+			scrapeAPIPaths(jsURL, cleanJsContent, debug)
+
+			// Check for sourceMappingURL
+			if strings.HasSuffix(cleanJsContent, ".map") {
+				lines := strings.Split(cleanJsContent, "\n")
+				lastLine := lines[len(lines)-1]
+				if strings.HasPrefix(lastLine, "//# sourceMappingURL=") {
+					mapFileName := strings.TrimPrefix(lastLine, "//# sourceMappingURL=")
+					mapFileUrl := urlJoin(jsURL, mapFileName)
+					debugLog(debug, "Debug: Fetching source map: %s\n", mapFileUrl)
+					mapFileRes, err := http.Get(mapFileUrl)
+					if err != nil {
+						fmt.Printf("Failed to get %s: %v\n", mapFileUrl, err)
+						return
+					}
+					defer mapFileRes.Body.Close()
+
+					mapFileContent, err := ioutil.ReadAll(mapFileRes.Body)
+					if err != nil {
+						fmt.Printf("Failed to read %s: %v\n", mapFileUrl, err)
+						return
+					}
+
+					var sourceMap struct {
+						SourcesContent []string `json:"sourcesContent"`
+					}
+
+					err = json.Unmarshal(mapFileContent, &sourceMap)
+					if err != nil {
+						fmt.Printf("Failed to parse source map %s: %v\n", mapFileUrl, err)
+						return
+					}
+
+					for _, sourceContent := range sourceMap.SourcesContent {
+						// Remove ANSI escape sequences
+						cleanSourceContent := removeANSI(sourceContent)
+
+						// Call the specific scraping functions
+						scrapeEnvVars(mapFileUrl, cleanSourceContent)
+						scrapeAPIPaths(mapFileUrl, cleanSourceContent, debug)
 					}
 				}
 			}
 		}
 	})
-}
-
-func urlJoin(baseURL string, relURL string) string {
-	u, _ := url.Parse(baseURL)
-	rel, _ := url.Parse(relURL)
-	return u.ResolveReference(rel).String()
 }
 
 func main() {

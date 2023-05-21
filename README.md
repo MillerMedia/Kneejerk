@@ -1,10 +1,11 @@
 # Kneejerk
 
-Kneejerk is a pentesting command line tool for scanning environment variables from React websites.
+Kneejerk is a pentesting command line tool for scanning environment variables and other information from React websites.
 
 ## Features
 * Scans JavaScript files of a provided URL for environment variables.
-* Outputs found environment variables to the console or to a specified file.
+* Performs API endpoint enumeration throughout React codebase
+* Outputs found env variables and API endpoints to the console or to a specified file.
 
 ## Installation
 
