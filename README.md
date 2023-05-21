@@ -11,7 +11,7 @@ Kneejerk is a pentesting command line tool for scanning environment variables fr
 Run the following command to install the latest version -
 
 ```sh
-go install -v github.com/millermedia/kneejerk/cmd/kneejerk@latest
+go install -v github.com/MillerMedia/kneejerk/cmd/kneejerk@latest
 ```
 
 <details>
