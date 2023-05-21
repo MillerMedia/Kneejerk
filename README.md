@@ -72,14 +72,21 @@ optional arguments:
 
 ## Installation
 
-### Homebrew (Recommended)
+Run the following command to install the latest version -
 
-You can install Kneejerk using Homebrew:
-
-```bash
-brew tap MillerMedia/kneejerk
-brew install kneejerk
+```sh
+go install -v github.com/millermedia/kneejerk/cmd/kneejerk@latest
 ```
+
+<details>
+  <summary>Brew</summary>
+
+  ```sh
+  brew tap MillerMedia/kneejerk
+  brew install kneejerk
+  ```
+
+</details>
 
 ## Contributing
 
