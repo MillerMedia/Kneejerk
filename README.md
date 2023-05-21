@@ -6,6 +6,24 @@ Kneejerk is a pentesting command line tool for scanning environment variables fr
 * Scans JavaScript files of a provided URL for environment variables.
 * Outputs found environment variables to the console or to a specified file.
 
+## Installation
+
+Run the following command to install the latest version -
+
+```sh
+go install -v github.com/millermedia/kneejerk/cmd/kneejerk@latest
+```
+
+<details>
+  <summary>Brew</summary>
+
+  ```sh
+  brew tap MillerMedia/kneejerk
+  brew install kneejerk
+  ```
+
+</details>
+
 ## Usage
 
 #### Single URL
@@ -69,24 +87,6 @@ optional arguments:
   -u string
         URL of the website to scan
 ```
-
-## Installation
-
-Run the following command to install the latest version -
-
-```sh
-go install -v github.com/millermedia/kneejerk/cmd/kneejerk@latest
-```
-
-<details>
-  <summary>Brew</summary>
-
-  ```sh
-  brew tap MillerMedia/kneejerk
-  brew install kneejerk
-  ```
-
-</details>
 
 ## Contributing
 
