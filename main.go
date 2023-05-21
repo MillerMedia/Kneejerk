@@ -23,7 +23,7 @@ const banner = `
 | . \| | | |  __|  __| |  __| |  |   < 
 |_|\_|_| |_|\___|\___| |\___|_|  |_|\_\              
                     |__/                
-                               v0.0.1
+                               v0.1
 `
 
 // Pattern for .js files
@@ -33,6 +33,12 @@ var jsFilePattern = regexp.MustCompile(`.*\.js`)
 var envVarPattern = regexp.MustCompile(`(\b(?:NODE|REACT|AWS)[A-Z_]*\b\s*:\s*".*?")|(process\.env\.[A-Z_][A-Z0-9_]*)`)
 
 var foundVars = map[string]struct{}{}
+
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func removeANSI(input string) string {
+	return ansiEscape.ReplaceAllString(input, "")
+}
 
 func determineSeverity(envVar string) string {
 	envVar = strings.ToUpper(envVar) // Ensure case-insensitive comparison
@@ -60,7 +66,10 @@ func colorizeMessage(templateID string, outputType string, severity string, jsUR
 }
 
 func scrapeJSFiles(u string, debug bool) {
-	res, err := http.Get(u)
+	// Remove ANSI escape sequences from the URL
+	cleanUrl := removeANSI(u)
+
+	res, err := http.Get(cleanUrl)
 	if err != nil {
 		fmt.Printf("Failed to get %s: %v\n", u, err)
 		return
@@ -93,7 +102,10 @@ func scrapeJSFiles(u string, debug bool) {
 				return
 			}
 
-			matches := envVarPattern.FindAllString(string(jsContent), -1)
+			// Remove ANSI escape sequences
+			cleanJsContent := removeANSI(string(jsContent))
+
+			matches := envVarPattern.FindAllString(cleanJsContent, -1)
 			for _, match := range matches {
 				if _, ok := foundVars[match]; !ok {
 					foundVars[match] = struct{}{}
@@ -113,7 +125,7 @@ func urlJoin(baseURL string, relURL string) string {
 }
 
 func main() {
-	fmt.Println(aurora.BrightMagenta(banner).Bold())
+	fmt.Println(banner)
 
 	url := flag.String("u", "", "URL of the website to scan")
 	list := flag.String("l", "", "Path to a file containing a list of URLs to scan")
@@ -133,12 +145,24 @@ func main() {
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
-			scrapeJSFiles(scanner.Text(), *debug)
+			fmt.Println(scanner.Text()) // print the input before processing
+			urlParts := strings.Split(scanner.Text(), " ")
+			if len(urlParts) > 3 {
+				scrapeJSFiles(urlParts[3], *debug)
+			} else {
+				fmt.Println("Invalid input:", scanner.Text())
+			}
 		}
 	} else if info, _ := os.Stdin.Stat(); info.Mode()&os.ModeCharDevice == 0 {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
-			scrapeJSFiles(scanner.Text(), *debug)
+			fmt.Println(scanner.Text()) // print the input before processing
+			urlParts := strings.Split(scanner.Text(), " ")
+			if len(urlParts) > 3 {
+				scrapeJSFiles(urlParts[3], *debug)
+			} else {
+				fmt.Println("Invalid input:", scanner.Text())
+			}
 		}
 	}
 
