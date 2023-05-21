@@ -164,18 +164,8 @@ func main() {
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
-			fmt.Println(scanner.Text())                // print the input before processing
 			cleanedInput := removeANSI(scanner.Text()) // Remove color codes
-			if outputFileWriter != nil {
-				_, _ = outputFileWriter.WriteString(cleanedInput + "\n")
-				_ = outputFileWriter.Flush()
-			}
-			urlParts := strings.Split(cleanedInput, " ")
-			if len(urlParts) > 3 {
-				scrapeJSFiles(urlParts[3], *debug)
-			} else {
-				fmt.Println("Invalid input:", cleanedInput)
-			}
+			scrapeJSFiles(cleanedInput, *debug)        // Here you don't need to split the input anymore.
 		}
 	} else if info, _ := os.Stdin.Stat(); info.Mode()&os.ModeCharDevice == 0 {
 		scanner := bufio.NewScanner(os.Stdin)
