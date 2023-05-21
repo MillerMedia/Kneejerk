@@ -36,6 +36,8 @@ var foundVars = map[string]struct{}{}
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
+var outputFileWriter *bufio.Writer = nil
+
 func removeANSI(input string) string {
 	return ansiEscape.ReplaceAllString(input, "")
 }
@@ -51,7 +53,7 @@ func determineSeverity(envVar string) string {
 	}
 }
 
-func colorizeMessage(templateID string, outputType string, severity string, jsURL string, match string) string {
+func colorizeMessage(templateID string, outputType string, severity string, jsURL string, match string) (string, string) {
 	templateIDColored := aurora.BrightGreen(templateID).String()
 	outputTypeColored := aurora.BrightBlue(outputType).String()
 	var severityColored string
@@ -62,7 +64,9 @@ func colorizeMessage(templateID string, outputType string, severity string, jsUR
 	} else {
 		severityColored = aurora.Blue(severity).String()
 	}
-	return fmt.Sprintf("[%s] [%s] [%s] %s [%s]", templateIDColored, outputTypeColored, severityColored, jsURL, match)
+	coloredMessage := fmt.Sprintf("[%s] [%s] [%s] %s [%s]", templateIDColored, outputTypeColored, severityColored, jsURL, match)
+	uncoloredMessage := fmt.Sprintf("[%s] [%s] [%s] %s [%s]", templateID, outputType, severity, jsURL, match)
+	return coloredMessage, uncoloredMessage
 }
 
 func scrapeJSFiles(u string, debug bool) {
@@ -110,8 +114,12 @@ func scrapeJSFiles(u string, debug bool) {
 				if _, ok := foundVars[match]; !ok {
 					foundVars[match] = struct{}{}
 					severity := determineSeverity(match)
-					coloredMessage := colorizeMessage("kneejerk", "js", severity, jsURL, match)
+					coloredMessage, uncoloredMessage := colorizeMessage("kneejerk", "js", severity, jsURL, match)
 					fmt.Println(coloredMessage)
+					if outputFileWriter != nil {
+						_, _ = outputFileWriter.WriteString(uncoloredMessage + "\n")
+						_ = outputFileWriter.Flush()
+					}
 				}
 			}
 		}
@@ -133,6 +141,17 @@ func main() {
 	debug := flag.Bool("debug", false, "Print debugging statements")
 	flag.Parse()
 
+	if *output != "" {
+		file, err := os.Create(*output)
+		if err != nil {
+			fmt.Printf("Failed to create %s: %v\n", *output, err)
+			return
+		}
+		defer file.Close()
+
+		outputFileWriter = bufio.NewWriter(file)
+	}
+
 	if *url != "" {
 		scrapeJSFiles(*url, *debug)
 	} else if *list != "" {
@@ -145,38 +164,34 @@ func main() {
 
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
-			fmt.Println(scanner.Text()) // print the input before processing
-			urlParts := strings.Split(scanner.Text(), " ")
+			fmt.Println(scanner.Text())                // print the input before processing
+			cleanedInput := removeANSI(scanner.Text()) // Remove color codes
+			if outputFileWriter != nil {
+				_, _ = outputFileWriter.WriteString(cleanedInput + "\n")
+				_ = outputFileWriter.Flush()
+			}
+			urlParts := strings.Split(cleanedInput, " ")
 			if len(urlParts) > 3 {
 				scrapeJSFiles(urlParts[3], *debug)
 			} else {
-				fmt.Println("Invalid input:", scanner.Text())
+				fmt.Println("Invalid input:", cleanedInput)
 			}
 		}
 	} else if info, _ := os.Stdin.Stat(); info.Mode()&os.ModeCharDevice == 0 {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
-			fmt.Println(scanner.Text()) // print the input before processing
-			urlParts := strings.Split(scanner.Text(), " ")
+			fmt.Println(scanner.Text())                // print the input before processing
+			cleanedInput := removeANSI(scanner.Text()) // Remove color codes
+			if outputFileWriter != nil {
+				_, _ = outputFileWriter.WriteString(cleanedInput + "\n")
+				_ = outputFileWriter.Flush()
+			}
+			urlParts := strings.Split(cleanedInput, " ")
 			if len(urlParts) > 3 {
 				scrapeJSFiles(urlParts[3], *debug)
 			} else {
-				fmt.Println("Invalid input:", scanner.Text())
+				fmt.Println("Invalid input:", cleanedInput)
 			}
 		}
-	}
-
-	if *output != "" {
-		file, err := os.Create(*output)
-		if err != nil {
-			fmt.Printf("Failed to create %s: %v\n", *output, err)
-			return
-		}
-		defer file.Close()
-
-		for varName := range foundVars {
-			_, _ = file.WriteString(fmt.Sprintf("[kneejerk] [js] [info] %s\n", varName))
-		}
-		fmt.Printf("Results saved to %s\n", *output)
 	}
 }
