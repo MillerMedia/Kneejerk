@@ -49,6 +49,8 @@ func determineSeverity(envVar string) string {
 		return "high"
 	} else if strings.Contains(envVar, "AWS") {
 		return "medium"
+	} else if strings.Contains(envVar, "API") && (strings.Contains(envVar, "URL") || strings.Contains(envVar, "HOST") || strings.Contains(envVar, "ROOT")) {
+		return "low"
 	} else {
 		return "info"
 	}
@@ -62,6 +64,8 @@ func colorizeMessage(templateID string, outputType string, severity string, jsUR
 		severityColored = aurora.Red(severity).String()
 	} else if severity == "medium" {
 		severityColored = aurora.Yellow(severity).String()
+	} else if severity == "low" {
+		severityColored = aurora.Green(severity).String()
 	} else {
 		severityColored = aurora.Blue(severity).String()
 	}
