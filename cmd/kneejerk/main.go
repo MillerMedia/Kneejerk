@@ -30,20 +30,24 @@ const banner = `
 var jsFilePattern = regexp.MustCompile(`.*\.js`)
 
 // Regex to find environment variables in both formats
-var envVarPattern = regexp.MustCompile(`(\b(?:NODE|REACT|AWS)[A-Z_]*\b\s*:\s*".*?")|(process\.env\.[A-Z_][A-Z0-9_]*)`)
-
-// var axiosFetchPattern = regexp.MustCompile(`(axios\.get\('(.*)'\))|(axios\.post\('(.*)'\,)|(axios\('(.*)'\))|(fetch\('(.*)'\))`)
+var axiosFetchPattern = regexp.MustCompile(`(axios\.get\('(.*)'\))|(axios\.post\('(.*)'\,)|(axios\('(.*)'\))|(fetch\('(.*)'\))`)
 var axiosPattern = regexp.MustCompile(`axios\.(get|delete|head|options|post|put|patch)\(\s*["']([^"']+)["']`)
-var apiPathPattern = regexp.MustCompile(`"(GET|POST|PUT|DELETE|PATCH)",\s*"/v\d+[^"]*"`)
+var apiPathPattern = regexp.MustCompile(`"(GET|POST|PUT|DELETE|PATCH)",\s*"(/v\d+[^"]*)"`)
 
 var foundVars = map[string]struct{}{}
 
 var outputFileWriter *bufio.Writer = nil
 
-// Scrape environment variables
+// Regex to find environment variables directly assigned
+var directEnvVarPattern = regexp.MustCompile(`\b(?:NODE|REACT_APP|AWS)_?[A-Z_]*\b\s*:\s*".*?"`)
+
+// Regex to find environment variables accessed via process.env
+//var processEnvVarPattern = regexp.MustCompile(`process\.env\.[A-Z_][A-Z0-9_]*[^;]*=`)
+
 func scrapeEnvVars(jsURL string, jsContent string) {
-	matches := envVarPattern.FindAllString(jsContent, -1)
-	for _, match := range matches {
+	// First, check for direct assignments
+	directMatches := directEnvVarPattern.FindAllString(jsContent, -1)
+	for _, match := range directMatches {
 		if _, ok := foundVars[match]; !ok {
 			foundVars[match] = struct{}{}
 			severity := determineSeverity(match)
@@ -55,6 +59,21 @@ func scrapeEnvVars(jsURL string, jsContent string) {
 			}
 		}
 	}
+
+	// Then, check for process.env variables
+	//processMatches := processEnvVarPattern.FindAllString(jsContent, -1)
+	//for _, match := range processMatches {
+	//	if _, ok := foundVars[match]; !ok {
+	//		foundVars[match] = struct{}{}
+	//		severity := determineSeverity(match)
+	//		coloredMessage, uncoloredMessage := colorizeMessage("kneejerk", "env-var", severity, jsURL, match)
+	//		fmt.Println(coloredMessage)
+	//		if outputFileWriter != nil {
+	//			_, _ = outputFileWriter.WriteString(uncoloredMessage + "\n")
+	//			_ = outputFileWriter.Flush()
+	//		}
+	//	}
+	//}
 }
 
 // Scrape APIs
@@ -62,27 +81,28 @@ func scrapeAPIPaths(jsURL string, jsContent string, debug bool) {
 	debugLog(debug, "Debug: Scanning for API paths in %s...\n", jsURL)
 
 	// Check for patterns like "POST", "/v1/accounts:signInWithPhoneNumber",
-	matches := apiPathPattern.FindAllString(jsContent, -1)
+	matches := apiPathPattern.FindAllStringSubmatch(jsContent, -1)
 	for _, match := range matches {
 		debugLog(debug, "Debug: Found API path match: %s\n", match)
-		if _, ok := foundVars[match]; !ok {
-			foundVars[match] = struct{}{}
-			// Determine the severity for APIs (you need to implement this if needed)
-			severity := determineSeverity(match)
-			coloredMessage, uncoloredMessage := colorizeMessage("kneejerk", "api", severity, jsURL, match)
-			fmt.Println(coloredMessage)
-			if outputFileWriter != nil {
-				_, _ = outputFileWriter.WriteString(uncoloredMessage + "\n")
-				_ = outputFileWriter.Flush()
-			}
+		if _, ok := foundVars[match[0]]; !ok {
+			foundVars[match[0]] = struct{}{}
+			printAPI(debug, jsURL, match[1], match[2])
 		}
 	}
 
-	axiosPathRE := regexp.MustCompile(`(?s)axios\.(?:get|post|put|delete|patch)\(\s*['"]([^'"]+)['"]`)
-	fetchPathRE := regexp.MustCompile(`(?s)fetch\(\s*['"]([^'"]+)['"]`)
-	ajaxPathRE := regexp.MustCompile(`(?s)\$\.ajax\(\s*{\s*url\s*:\s*['"]([^'"]+)['"]`)
+	axiosPathRE := regexp.MustCompile(`axios\.(get|post|put|delete|patch)\(\s*['"]([^'"]+)['"]`)
+	fetchPathRE := regexp.MustCompile(`fetch\(\s*['"]([^'"]+)['"],[\s\S]*?{[\s\S]*?method\s*:\s*['"]([^'"]+)['"]`)
+	ajaxPathRE := regexp.MustCompile(`\$\.ajax\(\s*{\s*url\s*:\s*['"]([^'"]+)['"],[\s\S]*?type\s*:\s*['"]([^'"]+)['"]`)
 
 	axiosMatches := axiosPathRE.FindAllStringSubmatch(jsContent, -1)
+
+	// Swap method and endpoint in axiosMatches
+	for i, match := range axiosMatches {
+		if len(match) > 2 {
+			axiosMatches[i] = []string{match[0], match[2], match[1]}
+		}
+	}
+
 	fetchMatches := fetchPathRE.FindAllStringSubmatch(jsContent, -1)
 	ajaxMatches := ajaxPathRE.FindAllStringSubmatch(jsContent, -1)
 
@@ -93,17 +113,12 @@ func scrapeAPIPaths(jsURL string, jsContent string, debug bool) {
 
 	for _, match := range allMatches {
 		if len(match) > 1 {
+			method := strings.ToUpper(match[2]) // Convert the method to uppercase
 			endpoint := strings.ReplaceAll(match[1], `${}`, "")
-			debugLog(debug, "Debug: Found AJAX endpoint: %s\n", endpoint)
+			debugLog(debug, "Debug: Found AJAX endpoint: [%s, %s]\n", method, endpoint)
 			if _, ok := foundVars[endpoint]; !ok {
 				foundVars[endpoint] = struct{}{}
-				severity := determineSeverity(endpoint)
-				coloredMessage, uncoloredMessage := colorizeMessage("kneejerk", "api", severity, jsURL, endpoint)
-				fmt.Println(coloredMessage)
-				if outputFileWriter != nil {
-					_, _ = outputFileWriter.WriteString(uncoloredMessage + "\n")
-					_ = outputFileWriter.Flush()
-				}
+				printAPI(debug, jsURL, method, endpoint)
 			}
 		}
 	}

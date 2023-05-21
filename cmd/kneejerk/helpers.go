@@ -57,3 +57,68 @@ func urlJoin(baseURL string, relURL string) string {
 	rel, _ := url.Parse(relURL)
 	return u.ResolveReference(rel).String()
 }
+
+func isSameBaseDomain(url1, url2 string) bool {
+	u1, err1 := url.Parse(url1)
+	u2, err2 := url.Parse(url2)
+
+	if err1 != nil || err2 != nil {
+		return false
+	}
+
+	host1Parts := strings.Split(u1.Host, ".")
+	host2Parts := strings.Split(u2.Host, ".")
+
+	if len(host1Parts) < 2 || len(host2Parts) < 2 {
+		return false
+	}
+
+	domain1 := host1Parts[len(host1Parts)-2] + "." + host1Parts[len(host1Parts)-1]
+	domain2 := host2Parts[len(host2Parts)-2] + "." + host2Parts[len(host2Parts)-1]
+
+	return domain1 == domain2
+}
+
+func printAPI(debug bool, jsURL string, method string, endpoint string) {
+	if len(method) > 12 {
+		debugLog(debug, "Debug: Ignoring API path due to method length (possible false positive): [%s, %s]\n", method, endpoint)
+		return
+	}
+
+	// Parse the jsURL and endpoint
+	jsURLParsed, _ := url.Parse(jsURL)
+	endpointParsed, err := url.Parse(endpoint)
+
+	// If endpoint parsed successfully and it's a full URL, check if the base domain matches
+	if err == nil && endpointParsed.IsAbs() {
+		if extractBaseDomain(jsURLParsed.Host) != extractBaseDomain(endpointParsed.Host) {
+			return
+		}
+	}
+	//} else {
+	//	// If it's not a full URL, treat it as a relative path and join with the jsURL
+	//	endpoint = urlJoin(jsURL, endpoint)
+	//	endpointParsed, err = url.Parse(endpoint)
+	//	if err != nil {
+	//		return
+	//	}
+	//}
+
+	severity := determineSeverity(endpoint)
+
+	coloredMessage, uncoloredMessage := colorizeMessage("kneejerk", "api", severity, jsURL, fmt.Sprintf(`"%s", "%s"`, method, endpoint))
+	fmt.Println(coloredMessage)
+	if outputFileWriter != nil {
+		_, _ = outputFileWriter.WriteString(uncoloredMessage + "\n")
+		_ = outputFileWriter.Flush()
+	}
+}
+
+// This function takes a hostname and returns its base domain.
+func extractBaseDomain(hostname string) string {
+	parts := strings.Split(hostname, ".")
+	if len(parts) <= 2 {
+		return hostname
+	}
+	return strings.Join(parts[len(parts)-2:], ".")
+}
