@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
@@ -23,7 +24,7 @@ const banner = `
 | . \| | | |  __|  __| |  __| |  |   < 
 |_|\_|_| |_|\___|\___| |\___|_|  |_|\_\              
                     |__/                
-                               v0.1.5
+                               v0.1.6
 `
 
 // Pattern for .js files
@@ -133,6 +134,7 @@ func urlJoin(baseURL string, relURL string) string {
 }
 
 func main() {
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	fmt.Println(banner)
 
 	url := flag.String("u", "", "URL of the website to scan")
